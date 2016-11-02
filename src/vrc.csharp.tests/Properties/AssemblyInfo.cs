@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("vrc.csharp")]
+[assembly: AssemblyTitle("vrc.csharp.tests")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("vrc.csharp")]
+[assembly: AssemblyProduct("vrc.csharp.tests")]
 [assembly: AssemblyCopyright("Copyright ©  2016")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("3ce2ae9c-e8e8-402d-8c67-1d6726593fc4")]
+[assembly: Guid("83a4c487-3f9b-40b5-8256-5a4b9f79d512")]
 
 // Version information for an assembly consists of the following four values:
 //
