@@ -23,11 +23,11 @@ namespace vrc.visualstudio
             this.currentBuffer = currentBuffer;
         }
 
-        internal Task Sample()
+        internal async Task Sample()
         {
-            var reader = new CodeReader(workspaceService.GetDocument(currentBuffer));
-
-            throw new NotImplementedException();
+            var document = workspaceService.GetDocument(currentBuffer);
+            var syntaxTreeRoot = await document.GetSyntaxRootAsync();
+            var reader = new CodeReader(syntaxTreeRoot);
         }
     }
 }
