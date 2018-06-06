@@ -15,15 +15,18 @@ namespace vrc.console
     {
         static async Task Main(string[] args)
         {
-            if (args.Length == 0)
-                throw new ArgumentException("Argument must be a solution path");
+            if (args.Length != 2)
+                throw new ArgumentException("Arguments must be: 1. a solution path; 2. output path");
             if (!File.Exists(args[0]))
                 throw new ArgumentException("Argument must be a solution path");
+            if (!Directory.Exists(Path.GetDirectoryName(args[1])))
+                throw new ArgumentException("Argument must be a valid location");
             var solutionPath = args[0];
-            await ProcessSolution(solutionPath);
+            var outputPath = args[1];
+            await ProcessSolution(solutionPath, outputPath);
         }
 
-        private static async Task ProcessSolution(string solutionPath)
+        private static async Task ProcessSolution(string solutionPath, string outputPath)
         {
             var workspace = MSBuildWorkspace.Create();
             await workspace.OpenSolutionAsync(solutionPath);
@@ -33,32 +36,23 @@ namespace vrc.console
             {
                 foreach (var document in project.Documents)
                 {
-                    await ProcessDocument(document);
+                    await ProcessDocument(document, outputPath);
                 }
             }
         }
 
-        private static async Task ProcessDocument(Document document)
+        private static async Task ProcessDocument(Document document, string outputPath)
         {
             var semantics = await document.GetSemanticModelAsync();
             var filePath = document.FilePath;
             var fileName = Path.GetFileName(filePath);
+            var sb = new StringBuilder();
+
             Console.WriteLine($"Processing {filePath}");
             var syntax = await document.GetSyntaxRootAsync();
             foreach (var typeSyntax in syntax.DescendantNodes().OfType<TypeDeclarationSyntax>())
             {
                 var typeSymbol = semantics.GetDeclaredSymbol(typeSyntax);
-
-                // TODO: Find all types used in the document.
-                // this includes identifiers and return types
-                // see which assembly they are from
-                /*
-                foreach (var methodSyntax in typeSyntax.DescendantNodes().OfType<MethodDeclarationSyntax>())
-                {
-                    Console.WriteLine($"---Method  {typeSyntax.Identifier}");
-                    var methodSymbol = semantics.GetDeclaredSymbol(methodSyntax);
-                }
-                */
                 foreach (var identifierSyntax in typeSyntax.DescendantNodes().OfType<IdentifierNameSyntax>())
                 {
                     var symbol = semantics.GetDeclaredSymbol(identifierSyntax);
@@ -67,36 +61,76 @@ namespace vrc.console
                         symbol = semantics.GetSymbolInfo(identifierSyntax).Symbol;
                         if (symbol == null)
                         {
-                            Console.WriteLine($"---Identif.{identifierSyntax.Identifier} has no symbol");
+                            Console.WriteLine($"Identifier {identifierSyntax.Identifier} has no symbol");
                             continue;
                         }
                     }
 
-                    //var declaringLine = TextLine.FromSpan(syntax.GetText(), identifierSyntax.Span);
-                    var a = symbol.ContainingAssembly.MetadataName;
+                    var lineNumber = syntax.GetText().Lines.GetLineFromPosition(identifierSyntax.Span.Start).LineNumber;
                     if (symbol is IFieldSymbol fieldSymbol)
                     {
                         var p = fieldSymbol.Type;
-                        var pa = fieldSymbol.Type.ContainingAssembly.MetadataName;
+                        var pa = fieldSymbol.Type.ContainingAssembly?.MetadataName;
 
-                        //Console.WriteLine($"{fileName}:{declaringLine.LineNumber} - {identifierSyntax.Identifier} from {a}");
-                        Console.WriteLine($"{fileName} - {symbol.Kind} {identifierSyntax.Identifier} is {p.Name} from {pa}");
+                        Log(sb, fileName, lineNumber, symbol.Kind, identifierSyntax.Identifier, p.Name, pa);
                     }
                     else if (symbol is ILocalSymbol localSymbol)
                     {
                         var p = localSymbol.Type;
-                        var pa = localSymbol.Type.ContainingAssembly.MetadataName;
+                        var pa = localSymbol.Type.ContainingAssembly?.MetadataName;
 
-                        //Console.WriteLine($"{fileName}:{declaringLine.LineNumber} - {identifierSyntax.Identifier} from {a}");
-                        Console.WriteLine($"{fileName} - {symbol.Kind} {identifierSyntax.Identifier} is {p.Name} from {pa}");
+                        Log(sb, fileName, lineNumber, symbol.Kind, identifierSyntax.Identifier, p.Name, pa);
+                    }
+                    else if (symbol is IMethodSymbol methodSymbol)
+                    {
+                        var p = methodSymbol.ReturnType;
+                        var pa = methodSymbol.ReturnType.ContainingAssembly?.MetadataName;
+
+                        Log(sb, fileName, lineNumber, symbol.Kind, identifierSyntax.Identifier, p.Name, pa);
+                    }
+                    else if (symbol is ITypeParameterSymbol typeParameterSymbol)
+                    {
+                        var p = typeParameterSymbol;
+                        var pa = typeParameterSymbol.ContainingAssembly?.MetadataName;
+
+                        Log(sb, fileName, lineNumber, symbol.Kind, identifierSyntax.Identifier, p.Name, pa);
+                    }
+                    else if (symbol is IPropertySymbol propertySymbol)
+                    {
+                        var p = propertySymbol.Type;
+                        var pa = propertySymbol.Type?.ContainingAssembly?.MetadataName;
+
+                        Log(sb, fileName, lineNumber, symbol.Kind, identifierSyntax.Identifier, p.Name, pa);
+                    }
+                    else if (symbol is INamedTypeSymbol namedType)
+                    {
+                        var p = namedType;
+                        var pa = namedType.ContainingAssembly?.MetadataName;
+
+                        Log(sb, fileName, lineNumber, symbol.Kind, identifierSyntax.Identifier, p.Name, pa);
+                    }
+                    else if (symbol is IArrayTypeSymbol arraySymbol)
+                    {
+                        var p = arraySymbol.BaseType;
+                        var pa = arraySymbol.BaseType?.ContainingAssembly?.MetadataName;
+
+                        Log(sb, fileName, lineNumber, symbol.Kind, identifierSyntax.Identifier, p.Name, pa);
                     }
                     else
                     {
-                        //Console.WriteLine($"{fileName}:{declaringLine.LineNumber} - {identifierSyntax.Identifier} from {a}");
-                        Console.WriteLine($"{fileName} - {symbol.Kind} {identifierSyntax.Identifier} from {a}");
+                        var a = symbol.ContainingAssembly?.MetadataName;
+                        // We don't support symbol.GetType()
+                        Log(sb, fileName, lineNumber, symbol.Kind, identifierSyntax.Identifier, "", a);
                     }
                 }
             }
+            File.AppendAllText(outputPath, sb.ToString());
+        }
+
+        private static void Log(StringBuilder sb, string fileName, int lineNumber, SymbolKind kind, SyntaxToken identifier, string typeName, string typeAssembly)
+        {
+            Console.WriteLine($"{fileName}:{lineNumber} - {kind} {identifier} is {typeName} from {typeAssembly}");
+            sb.AppendLine($"{fileName},{lineNumber},{kind},{identifier},{typeName},{typeAssembly}");
         }
     }
 }
